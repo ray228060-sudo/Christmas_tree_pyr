@@ -24,7 +24,7 @@
             margin: 0; 
             overflow: hidden; 
             background: radial-gradient(circle at center, #0f2027 0%, #203a43 50%, #2c5364 100%); 
-            background-color: #050d1a; 
+            background-color: #490c20; 
             font-family: 'Times New Roman', serif; 
             touch-action: none; 
             user-select: none;
@@ -49,7 +49,7 @@
         /* Loading */
         #loader {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: #050d1a; z-index: 100;
+            background: #490c20; z-index: 100;
             display: flex; flex-direction: column; align-items: center; justify-content: center;
             transition: opacity 0.8s ease-out;
         }
@@ -363,16 +363,16 @@
         // --- 核心配置 ---
         const CONFIG = {
             colors: {
-                bg: 0x050d1a, 
-                fog: 0x050d1a,
-                champagneGold: 0xffd966, 
-                deepGreen: 0x03180a,     
-                accentRed: 0x990000,     
+                bg: 0x490c20, 
+                fog: 0x490c20,
+                champagneGold: 0xffdd8a, 
+                deepGreen: 0x235532,     
+                accentRed: 0xc8273e,     
             },
             particles: {
-                count: 1500,     
-                dustCount: 2000, 
-                snowCount: 1000,
+                count: matchMedia("(max-width: 700px)").matches ? 700 : 1500,     
+                dustCount: matchMedia("(max-width: 700px)").matches ? 650 : 2000, 
+                snowCount: matchMedia("(max-width: 700px)").matches ? 350 : 1000,
                 treeHeight: 24,  
                 treeRadius: 8    
             },
@@ -521,7 +521,7 @@
             camera.position.set(0, 2, CONFIG.camera.z); 
             renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
             renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, matchMedia("(max-width: 700px)").matches ? 1.25 : 2));
             renderer.toneMapping = THREE.ReinhardToneMapping; 
             renderer.toneMappingExposure = 2.2; 
             container.appendChild(renderer.domElement);
@@ -717,12 +717,13 @@
             const candyGeo = new THREE.TubeGeometry(curve, 16, 0.08, 8, false);
             const goldMat = new THREE.MeshStandardMaterial({ color: CONFIG.colors.champagneGold, metalness: 1.0, roughness: 0.1, envMapIntensity: 2.0, emissive: 0x443300, emissiveIntensity: 0.3 });
             const greenMat = new THREE.MeshStandardMaterial({ color: CONFIG.colors.deepGreen, metalness: 0.2, roughness: 0.8, emissive: 0x002200, emissiveIntensity: 0.2 });
+            const snowBranchMat = new THREE.MeshStandardMaterial({color: 0xfff7e8, roughness: .85, emissive: 0x393327});
             const redMat = new THREE.MeshPhysicalMaterial({ color: CONFIG.colors.accentRed, metalness: 0.3, roughness: 0.2, clearcoat: 1.0, emissive: 0x330000 });
             const candyMat = new THREE.MeshStandardMaterial({ map: caneTexture, roughness: 0.4 });
             for (let i = 0; i < CONFIG.particles.count; i++) {
                 const rand = Math.random();
                 let mesh, type;
-                if (rand < 0.40) { mesh = new THREE.Mesh(boxGeo, greenMat); type = 'BOX'; }
+                if (rand < 0.40) { mesh = new THREE.Mesh(boxGeo, i % 3 === 0 ? snowBranchMat : greenMat); type = 'BOX'; }
                 else if (rand < 0.70) { mesh = new THREE.Mesh(boxGeo, goldMat); type = 'GOLD_BOX'; }
                 else if (rand < 0.92) { mesh = new THREE.Mesh(sphereGeo, goldMat); type = 'GOLD_SPHERE'; }
                 else if (rand < 0.97) { mesh = new THREE.Mesh(sphereGeo, redMat); type = 'RED'; }
@@ -997,6 +998,20 @@ function protectPhoto() {
  const gallery = document.querySelector('#unlockedGallery');
  const bytes = value => Uint8Array.from(atob(value), char => char.charCodeAt(0));
  dialog.addEventListener('cancel', event => event.preventDefault());
+ const encryptedPhotos = new Map();
+ function startDownload(photo) {
+  if (!encryptedPhotos.has(photo)) {
+   const task = Promise.all(photo.parts.map(async path => {
+    const response = await fetch(path);
+    if (!response.ok) throw Error("Photo download failed");
+    return response.arrayBuffer();
+   })).then(parts => new Blob(parts).arrayBuffer());
+   encryptedPhotos.set(photo, task);
+   task.catch(() => encryptedPhotos.delete(photo));
+  }
+  return encryptedPhotos.get(photo);
+ }
+ packet.photos.forEach(startDownload);
  form.addEventListener('submit', async event => {
   event.preventDefault();
   button.disabled = true;
@@ -1004,12 +1019,7 @@ function protectPhoto() {
   try {
    const key = await photoKey(field.value,bytes(packet.salt));
    const photos = await Promise.all(packet.photos.map(async photo => {
-    const parts = await Promise.all(photo.parts.map(async path => {
-     const response = await fetch(path);
-     if (!response.ok) throw Error('Photo could not be loaded');
-     return response.arrayBuffer();
-    }));
-    const encrypted = await new Blob(parts).arrayBuffer();
+    const encrypted = await startDownload(photo);
     const plain = await crypto.subtle.decrypt({name:'AES-GCM',iv:bytes(photo.iv)},key,encrypted);
     return new Blob([plain],{type:photo.type});
    }));
