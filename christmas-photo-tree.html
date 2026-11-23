@@ -419,7 +419,8 @@
             createTextures();
             createParticles();
             createFoliage();
-            createTreeLights(); 
+            createTreeLights();
+            createGiftBoxes(); 
             createDust();
             createSnow();
 
@@ -646,6 +647,7 @@
                 this.posScatter.set(rScatter * Math.sin(phi) * Math.cos(theta), rScatter * Math.sin(phi) * Math.sin(theta), rScatter * Math.cos(phi));
             }
             update(dt, mode, focusTargetMesh) {
+                if (this.type === 'GIFT') this.mesh.visible = mode !== 'TREE';
                 let target = (mode === 'SCATTER') ? this.posScatter : this.posTree;
                 if (mode === 'FOCUS') {
                     if (this.mesh === focusTargetMesh) {
@@ -757,13 +759,15 @@
             trunk.position.y = -12.1;
             mainGroup.add(trunk);
         }
-        let treeLights, glints;
+        let treeLights, glints, lightRibbon;
+        let wasTree=true, relightStart=-10;
         function createTreeLights() {
             treeLights = new THREE.Group();
             const mobile = matchMedia("(max-width: 700px)").matches;
-            const route = [], positions = [], hues = [];
+            const route = [], positions = [], hues = [], activation = [];
             const palette = [0xffd577,0xfff0ba,0xff8e72].map(value => new THREE.Color(value));
-            function addBulb(x,y,z,index) {
+            function addBulb(x,y,z,index,lightAt) {
+                activation.push(lightAt);
                 positions.push(x,y,z);
                 const color=palette[index%13===0?2:index%3===0?1:0];
                 hues.push(color.r,color.g,color.b);
@@ -773,14 +777,16 @@
                 const radius=8.12*(1-t)+.32+.16*Math.sin(angle*2.3);
                 const point=new THREE.Vector3(Math.cos(angle)*radius,-10.2+t*20.5+.34*Math.sin(angle),Math.sin(angle)*radius);
                 route.push(point);
-                if(i%2===0)addBulb(point.x,point.y,point.z,i);
+                if(i%2===0)addBulb(point.x,point.y,point.z,i,1-t);
             }
-            const ribbon=new THREE.TubeGeometry(new THREE.CatmullRomCurve3(route),300,.044,5,false);
+            const curve=new THREE.CatmullRomCurve3(route.reverse());
+            const lengths=curve.getLengths(240);
+            const ribbon=lightRibbon=new THREE.TubeGeometry(curve,300,.044,5,false);
             treeLights.add(new THREE.Mesh(ribbon,new THREE.MeshBasicMaterial({color:new THREE.Color(1.8,1.05,.28),toneMapped:false})));
             for(let i=0;i<(mobile?145:245);i++){
                 const layer=i%10, v=(i*.61803398875)%1, angle=i*2.39996;
                 const radius=(8.4*(1-layer/10.1))*(.62+.43*v);
-                addBulb(Math.cos(angle)*radius,-10.45+layer*2.27+v*.8,Math.sin(angle)*radius,i);
+                addBulb(Math.cos(angle)*radius,-10.45+layer*2.27+v*.8,Math.sin(angle)*radius,i,1-layer/10);
             }
             const canvas=document.createElement('canvas');
             canvas.width=canvas.height=32;
@@ -792,19 +798,63 @@
             const bulbs=new THREE.BufferGeometry();
             bulbs.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
             bulbs.setAttribute('color',new THREE.Float32BufferAttribute(hues,3).setUsage(THREE.DynamicDrawUsage));
-            glints={hues,colors:bulbs.attributes.color};
+            const lightOrder=activation.map(t=>lengths[Math.round(t*240)]/lengths[240]);
+            glints={hues,colors:bulbs.attributes.color,activation:lightOrder};
             treeLights.add(new THREE.Points(bulbs,new THREE.PointsMaterial({
                 map:new THREE.CanvasTexture(canvas), size:mobile?.53:.65, vertexColors:true,
                 transparent:true, depthWrite:false, blending:THREE.AdditiveBlending,toneMapped:false
             })));
             mainGroup.add(treeLights);
         }
+        function createGiftBoxes() {
+            const mobile=matchMedia("(max-width: 700px)").matches;
+            const palettes=[
+                [0x95354d,0xffd788],[0x236b53,0xd3ffcd],
+                [0x4c4292,0xebc8ff],[0x956329,0xffe8a9],
+                [0x275f87,0xa6eaff]
+            ].map(([box,ribbon])=>[
+                new THREE.MeshStandardMaterial({color:box,emissive:box,emissiveIntensity:.36,roughness:.58}),
+                new THREE.MeshBasicMaterial({color:ribbon,toneMapped:false})
+            ]);
+            const boxGeometry=new THREE.BoxGeometry(1,1,1);
+            const ribbonX=new THREE.BoxGeometry(1.025,1.025,.145);
+            const ribbonZ=new THREE.BoxGeometry(.145,1.025,1.025);
+            const bowGeometry=new THREE.TorusGeometry(.17,.038,5,10);
+            for(let i=0;i<(mobile?15:23);i++){
+                const gift=new THREE.Group();
+                const [box,ribbon]=palettes[i%palettes.length];
+                gift.add(new THREE.Mesh(boxGeometry,box),new THREE.Mesh(ribbonX,ribbon),new THREE.Mesh(ribbonZ,ribbon));
+                for(const side of [-1,1]){
+                    const bow=new THREE.Mesh(bowGeometry,ribbon);
+                    bow.position.set(side*.153,.61,0);
+                    bow.rotation.z=side*.45;
+                    bow.scale.y=.62;
+                    gift.add(bow);
+                }
+                gift.scale.setScalar(.65+((i*.618)%1)*.58);
+                gift.rotation.set(i*.29,i*.43,.18);
+                mainGroup.add(gift);
+                const particle=new Particle(gift,'GIFT');
+                const angle=i*2.39996, radius=5.5+(i*.618%1)*7.5;
+                particle.posScatter.set(Math.cos(angle)*radius,-11+i*22/((mobile?15:23)-1),Math.sin(angle)*radius);
+                gift.visible=false;
+                particleSystem.push(particle);
+            }
+        }
         function updateTreeLights(){
-            treeLights.visible=STATE.mode==='TREE';
-            if(!treeLights.visible)return;
-            const {hues,colors}=glints;
+            const now=clock.elapsedTime;
+            const inTree=STATE.mode==='TREE';
+            treeLights.visible=inTree;
+            if(!inTree){wasTree=false;return;}
+            if(!wasTree){wasTree=true;relightStart=now;}
+            const progress=THREE.MathUtils.clamp((now-relightStart-.28)/4.8,0,1);
+            const segmentIndex=30;
+            const limit=lightRibbon.index.count;
+            lightRibbon.setDrawRange(0,Math.min(limit,Math.floor(progress*limit/segmentIndex)*segmentIndex));
+            const {hues,colors,activation}=glints;
             for(let i=0;i<colors.count;i++){
-                const light=.62+.56*(.5+.5*Math.sin(clock.elapsedTime*2+i*2.39996))**2;
+                const fade=progress===1?1:THREE.MathUtils.smoothstep(progress-activation[i],0,.055);
+                const light=fade*(.62+.56*(.5+.5*Math.sin(now*2+i*2.39996))**2);
                 colors.setXYZ(i,hues[i*3]*light,hues[i*3+1]*light,hues[i*3+2]*light);
             }
             colors.needsUpdate=true;
