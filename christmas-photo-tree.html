@@ -294,14 +294,6 @@
         <div class="controls-wrapper">
             <div class="btn-group">
                 <div class="control-btn" id="cam-btn">📷 Enable Gesture</div>
-                <label class="control-btn">
-                    Select Folder
-                    <input type="file" id="folder-input" webkitdirectory directory multiple>
-                </label>
-                <label class="control-btn">
-                    Select Files
-                    <input type="file" id="file-input" multiple accept="image/*">
-                </label>
             </div>
             <!-- 【修改】添加了 Press 'S' for Stats 的提示 -->
             <div class="hint-text">Touch: Drag | Click Photo | Press 'S' for Stats</div>
@@ -358,7 +350,7 @@
         import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
         import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
         import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'; 
-        import { FilesetResolver, HandLandmarker } from '@mediapipe/tasks-vision';
+
 
         // --- 核心配置 ---
         const CONFIG = {
@@ -370,8 +362,8 @@
                 accentRed: 0xc8273e,     
             },
             particles: {
-                count: matchMedia("(max-width: 700px)").matches ? 700 : 1500,     
-                dustCount: matchMedia("(max-width: 700px)").matches ? 650 : 2000, 
+                count: matchMedia("(max-width: 700px)").matches ? 100 : 170,     
+                dustCount: matchMedia("(max-width: 700px)").matches ? 120 : 260, 
                 snowCount: matchMedia("(max-width: 700px)").matches ? 350 : 1000,
                 treeHeight: 24,  
                 treeRadius: 8    
@@ -425,7 +417,8 @@
             setupEnvironment(); 
             setupLights();
             createTextures();
-            createParticles(); 
+            createParticles();
+            createFoliage(); 
             createDust();
             createSnow();
 
@@ -710,20 +703,80 @@
 //   - @Description: 3D Christmas tree with AI Gestures + Touch + Traffic Analytics.
 //   - @Style: Luxury Dashboard UI (Hidden by default, toggle with 'S')
 // --> 
+        let foliage, treeNeedles, scatteredNeedles, trunk;
+        function createFoliage() {
+            const phone = matchMedia("(max-width: 700px)").matches;
+            const layers = 10;
+            const branches = phone ? 21 : 29;
+            const sprigs = phone ? 15 : 20;
+            const positions = [];
+            const colors = [];
+            const scatter = [];
+            const greens = [0x183e22, 0x286238, 0x427b43, 0x639357].map(hex => new THREE.Color(hex));
+            const snow = new THREE.Color(0xfff6dc);
+            const random = Math.random;
+            for (let layer = 0; layer < layers; layer++) {
+                const y = -10.7 + layer * 2.27;
+                const width = 8.4 * (1 - layer / 10.1);
+                for (let branch = 0; branch < branches; branch++) {
+                    const angle = (branch + random() * .6) * Math.PI * 2 / branches + layer * .46;
+                    const reach = width * (.74 + random() * .31);
+                    const dx = Math.cos(angle), dz = Math.sin(angle);
+                    const hasSnow = random() < .36;
+                    for (let sprig = 0; sprig < sprigs; sprig++) {
+                        const t = (sprig + 1) / sprigs;
+                        const r = reach * t;
+                        const height = y + 2.65 * (1 - t) ** 1.55 + (random() - .5) * .45;
+                        const spread = (.14 + random() * .48) * (1 - t * .6);
+                        const length = (.24 + random() * .56) * (1 - layer * .042);
+                        const sx = dx * r, sz = dz * r;
+                        const driftX = (random() - .5) * 27, driftY = (random() - .5) * 27, driftZ = (random() - .5) * 27;
+                        for (const side of [-1, 1]) {
+                            const tipX = sx + dx * length - dz * spread * side;
+                            const tipZ = sz + dz * length + dx * spread * side;
+                            const tipY = height + .13 + random() * .33;
+                            positions.push(sx,height,sz,tipX,tipY,tipZ);
+                            scatter.push(driftX,driftY,driftZ,driftX+tipX-sx,driftY+tipY-height,driftZ+tipZ-sz);
+                            const green = greens[(branch + sprig) % greens.length];
+                            const tip = hasSnow && t > .38 && side === 1 ? snow : green;
+                            colors.push(green.r,green.g,green.b,tip.r,tip.g,tip.b);
+                        }
+                    }
+                }
+            }
+            treeNeedles = new Float32Array(positions);
+            scatteredNeedles = new Float32Array(scatter);
+            const geometry = new THREE.BufferGeometry();
+            geometry.setAttribute('position', new THREE.BufferAttribute(treeNeedles.slice(), 3).setUsage(THREE.DynamicDrawUsage));
+            geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors,3));
+            foliage = new THREE.LineSegments(geometry, new THREE.LineBasicMaterial({vertexColors:true, transparent:true, opacity:.96}));
+            foliage.frustumCulled = false;
+            mainGroup.add(foliage);
+            trunk = new THREE.Mesh(new THREE.CylinderGeometry(.36,.58,3.4,10),new THREE.MeshStandardMaterial({color:0x473224,roughness:1}));
+            trunk.position.y = -12.1;
+            mainGroup.add(trunk);
+        }
+        function updateFoliage(dt) {
+            const target = STATE.mode === 'TREE' ? treeNeedles : scatteredNeedles;
+            const positions = foliage.geometry.attributes.position;
+            const alpha = 1 - Math.exp(-2.8 * dt);
+            for (let i=0; i<target.length; i++) positions.array[i] += (target[i]-positions.array[i])*alpha;
+            positions.needsUpdate = true;
+            trunk.visible = STATE.mode === 'TREE';
+        }
+
         function createParticles() {
-            const sphereGeo = new THREE.SphereGeometry(0.5, 32, 32); 
+            const sphereGeo = new THREE.SphereGeometry(0.5, 12, 8); 
             const boxGeo = new THREE.BoxGeometry(0.55, 0.55, 0.55); 
             const curve = new THREE.CatmullRomCurve3([new THREE.Vector3(0, -0.5, 0), new THREE.Vector3(0, 0.3, 0), new THREE.Vector3(0.1, 0.5, 0), new THREE.Vector3(0.3, 0.4, 0)]);
             const candyGeo = new THREE.TubeGeometry(curve, 16, 0.08, 8, false);
             const goldMat = new THREE.MeshStandardMaterial({ color: CONFIG.colors.champagneGold, metalness: 1.0, roughness: 0.1, envMapIntensity: 2.0, emissive: 0x443300, emissiveIntensity: 0.3 });
-            const greenMat = new THREE.MeshStandardMaterial({ color: CONFIG.colors.deepGreen, metalness: 0.2, roughness: 0.8, emissive: 0x002200, emissiveIntensity: 0.2 });
-            const snowBranchMat = new THREE.MeshStandardMaterial({color: 0xfff7e8, roughness: .85, emissive: 0x393327});
             const redMat = new THREE.MeshPhysicalMaterial({ color: CONFIG.colors.accentRed, metalness: 0.3, roughness: 0.2, clearcoat: 1.0, emissive: 0x330000 });
             const candyMat = new THREE.MeshStandardMaterial({ map: caneTexture, roughness: 0.4 });
             for (let i = 0; i < CONFIG.particles.count; i++) {
                 const rand = Math.random();
                 let mesh, type;
-                if (rand < 0.40) { mesh = new THREE.Mesh(boxGeo, i % 3 === 0 ? snowBranchMat : greenMat); type = 'BOX'; }
+                if (rand < 0.40) { mesh = new THREE.Mesh(sphereGeo, goldMat); type = 'GOLD_SPHERE'; }
                 else if (rand < 0.70) { mesh = new THREE.Mesh(boxGeo, goldMat); type = 'GOLD_BOX'; }
                 else if (rand < 0.92) { mesh = new THREE.Mesh(sphereGeo, goldMat); type = 'GOLD_SPHERE'; }
                 else if (rand < 0.97) { mesh = new THREE.Mesh(sphereGeo, redMat); type = 'RED'; }
@@ -784,41 +837,6 @@
             updatePhotoLayout();
         }
 
-        function handleImageUpload(e) {
-            const files = e.target.files;
-            if(!files.length) return;
-            Array.from(files).forEach(f => {
-                if (!f.type.startsWith('image/')) return;
-                const reader = new FileReader();
-                reader.onload = (ev) => {
-                    new THREE.TextureLoader().load(ev.target.result, (t) => {
-                        t.colorSpace = THREE.SRGBColorSpace;
-                        addPhotoToScene(t);
-                    });
-                }
-                reader.readAsDataURL(f);
-            });
-        }
-//         <!--
-//   - @Project: Grand Luxury Tree - Christmas Edition (Touch & Gesture & Stats)
-//   - @Author: wp/electronicminer
-//   - @Date: 2025-12-08
-//   - @Description: 3D Christmas tree with AI Gestures + Touch + Traffic Analytics.
-//   - @Style: Luxury Dashboard UI (Hidden by default, toggle with 'S')
-// --> 
-        function loadPredefinedImages() {
-            const loader = new THREE.TextureLoader();
-            if (CONFIG.preload.autoScanLocal) {
-                for (let i = 1; i <= CONFIG.preload.scanCount; i++) {
-                    const pathJpg = `./images/(${i}).jpg`;
-                    const pathPng = `./images/(${i}).png`;
-                    loader.load(pathJpg, (t) => { t.colorSpace = THREE.SRGBColorSpace; addPhotoToScene(t); }, undefined, () => {
-                             loader.load(pathPng, (t) => { t.colorSpace = THREE.SRGBColorSpace; addPhotoToScene(t); }, undefined, () => {} );
-                    });
-                }
-            }
-        }
-
         function showMsg(txt) {
             const box = document.getElementById('msg-box');
             box.innerText = txt; box.style.display = 'block';
@@ -831,6 +849,7 @@
             debugInfo.innerText = "Loading AI models...";
             video = document.getElementById('webcam');
             try {
+                const { FilesetResolver, HandLandmarker } = await import('@mediapipe/tasks-vision');
                 const vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm");
                 handLandmarker = await HandLandmarker.createFromOptions(vision, {
                     baseOptions: { modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`, delegate: "GPU" },
@@ -907,8 +926,6 @@
                 renderer.setSize(window.innerWidth, window.innerHeight);
                 composer.setSize(window.innerWidth, window.innerHeight);
             });
-            document.getElementById('file-input').addEventListener('change', handleImageUpload);
-            document.getElementById('folder-input').addEventListener('change', handleImageUpload);
             camBtn.addEventListener('click', () => { initMediaPipe(); });
             window.addEventListener('keydown', (e) => {
                 const key = e.key.toLowerCase();
@@ -955,6 +972,7 @@
             mainGroup.rotation.y = STATE.rotation.y;
             mainGroup.rotation.x = STATE.rotation.x;
             particleSystem.forEach(p => p.update(dt, STATE.mode, STATE.focusTarget));
+            updateFoliage(dt);
             updateSnow();
             composer.render();
         }
@@ -975,12 +993,9 @@
             }
             document.querySelector('#unlockedGallery').hidden = true;
         }
-        init().then(() => {
+        init().then(mountUnlockedPhotos).then(() => {
             window.dispatchEvent(new Event("tree-3d-ready"));
-            const mount = () => mountUnlockedPhotos().catch(console.error);
-            window.addEventListener('tree-photo-unlocked', mount);
-            mount();
-        });
+        }).catch(() => window.dispatchEvent(new Event('tree-3d-failed')));
 
     </script>
 
@@ -993,14 +1008,14 @@ body.postcard-mode #loader,body.postcard-mode #ui-layer,body.postcard-mode #canv
 #postcard p{margin:0 0 12px;font:italic clamp(18px,4vw,27px) Georgia,serif;color:#ffe0a2}
 #postcard button,#openAlbum button,#closeGallery{font:14px system-ui;color:#fff4de;background:#4d1c25;border:1px solid #d3aa71;border-radius:999px;padding:8px 13px;margin:0 3px;min-height:36px}
 #gestureStatus{display:block;font:13px system-ui;color:#ffe0a2;margin-top:6px}
-#photoUnlock{z-index:10000}
+#photoUnlock{z-index:10000;margin:auto auto max(24px,env(safe-area-inset-bottom))} #photoUnlock::backdrop{background:#14040b50}
 #closeGallery{position:sticky;top:0;display:block;margin:0 0 10px auto}
 #morven3d{position:fixed;bottom:max(16px,env(safe-area-inset-bottom));left:20px;color:#ffdf9c;font:italic 20px Georgia,serif;z-index:75;pointer-events:none}
 </style>
 <section id="postcard">
  <h2>Merry Christmas</h2>
  <canvas id="evergreen" role="img" aria-label="挂着暖金灯、覆着白雪的层叠圣诞树"></canvas>
- <div><p>From Morven</p><button id="openAlbum">打开照片</button><button id="enable3D">开启 3D 手势</button><small id="gestureStatus" role="status"></small></div>
+ <div><small id="gestureStatus" role="status"></small></div>
 </section>
 <div id="morven3d" hidden>From Morven</div>
 <script>
@@ -1056,22 +1071,28 @@ body.postcard-mode #loader,body.postcard-mode #ui-layer,body.postcard-mode #canv
   cx.closePath();cx.shadowBlur=16;cx.shadowColor='#face6a';cx.fillStyle='#ffe098';cx.fill();cx.restore();
  }
  draw();if(window.ResizeObserver)new ResizeObserver(draw).observe(canvas);else window.addEventListener('resize',draw);
- document.querySelector('#openAlbum').onclick=()=>{
-  if(window.treePhotoUrls?.length)document.querySelector('#unlockedGallery').hidden=false;
-  else document.querySelector('#photoUnlock').showModal();
- };
- document.querySelector('#enable3D').onclick=event=>{
-  event.target.disabled=true;
-  document.querySelector('#gestureStatus').textContent='正在加载 3D 圣诞树…';
+ window.addEventListener('tree-photo-unlocked',()=>{
   const script=document.createElement('script');
-  script.type='module';script.textContent=document.querySelector('#gestureModule').textContent;
-  const fallback=setTimeout(()=>{document.querySelector('#gestureStatus').textContent='3D 加载超时，可以继续欣赏贺卡。';},12000);
+  const status=document.querySelector('#unlockStatus');
+  const dialog=document.querySelector('#photoUnlock');
+  script.type='module';
+  script.textContent=document.querySelector('#gestureModule').textContent;
+  const showFallback=()=>{
+   dialog.close();
+   document.querySelector('#gestureStatus').textContent='3D 暂未加载，可先查看照片。';
+   document.querySelector('#unlockedGallery').hidden=false;
+  };
+  const fallback=setTimeout(showFallback,16000);
+  window.addEventListener('tree-3d-failed',()=>{clearTimeout(fallback);showFallback()},{once:true});
   window.addEventListener('tree-3d-ready',()=>{
-   clearTimeout(fallback);document.body.classList.remove('postcard-mode');
+   clearTimeout(fallback);
+   dialog.close();
+   document.body.classList.remove('postcard-mode');
    document.querySelector('#postcard').hidden=true;document.querySelector('#morven3d').hidden=false;
   },{once:true});
+  status.textContent='密码正确，正在挂上照片…';
   document.body.append(script);
- };
+ },{once:true});
 })();
 </script><section id="unlockedGallery" aria-label="已解锁的照片" hidden><button id="closeGallery" onclick="this.parentElement.hidden=true">返回圣诞树</button></section>
 <style>#unlockedGallery{position:fixed;inset:6% 5%;z-index:9999;overflow:auto;text-align:center;background:#101b24;padding:12px;border:1px solid #d3ad62;border-radius:12px}#unlockedGallery img{display:block;max-width:100%;max-height:74vh;margin:0 auto 14px}</style>
@@ -1123,17 +1144,16 @@ function protectPhoto() {
     image.alt = '圣诞照片 '+(index+1);
     gallery.append(image);
    });
-   gallery.hidden=false;
    form.reset();
-   dialog.close();
    window.dispatchEvent(new Event('tree-photo-unlocked'));
   } catch {
    status.textContent = '解锁失败，请检查密码，或换一个支持 HTTPS 的浏览器。';
   } finally {
-   button.disabled = false;
+   if(!window.treePhotoUrls)button.disabled = false;
   }
  });
 }
 protectPhoto();
+document.querySelector('#photoUnlock').showModal();
 </script></body>
 </html>
