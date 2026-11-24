@@ -277,7 +277,7 @@ body:not(.postcard-mode) #morven3d{bottom:max(20px,calc(env(safe-area-inset-bott
 body:not(.postcard-mode) #debug-info{left:50%;width:max-content;max-width:55%;transform:translateX(-50%);text-align:center}
 @media(max-width:450px){body:not(.postcard-mode) #debug-info{bottom:3px;font-size:8px}}
 </style></head>
-<body class="postcard-mode"><dialog id="photoUnlock" style="max-width:85vw;background:#101b24;color:#fff1d1;border:1px solid #d3ad62;border-radius:12px;padding:22px"><form id="unlockForm"><label for="photoPassword">输入密码，打开圣诞照片</label><p><input id="photoPassword" type="password" required autocomplete="off" style="font-size:16px"></p><button type="submit">解锁照片</button><p id="unlockStatus" role="status"></p></form></dialog><style>#photoUnlock::backdrop{background:#0009}</style>
+<body class="postcard-mode"><dialog open id="photoUnlock" style="max-width:85vw;background:#101b24;color:#fff1d1;border:1px solid #d3ad62;border-radius:12px;padding:22px"><form id="unlockForm"><label for="photoPassword">输入密码，打开圣诞照片</label><p><input id="photoPassword" type="password" required autocomplete="off" style="font-size:16px"></p><button type="submit">解锁照片</button><p id="unlockStatus" role="status"></p></form></dialog><style>#photoUnlock::backdrop{background:#0009}</style>
 
     <div id="loader">
         <div class="spinner"></div>
@@ -459,12 +459,25 @@ function protectPhoto() {
   status.textContent = '正在解锁…';
   try {
    const password = field.value;
-   const chunks = await Promise.all(photoParts.map(async path => {
-    const response = await fetch(path);
-    if (!response.ok) throw new Error('Photo download failed');
-    return response.text();
-   }));
-   const packet = JSON.parse(chunks.join(''));
+   status.textContent = '正在下载加密照片…';
+   const controller = new AbortController();
+   const timeout = setTimeout(() => controller.abort(), 25000);
+   let packet;
+   try {
+    const chunks = await Promise.all(photoParts.map(async path => {
+     const response = await fetch(path, {signal:controller.signal});
+     if (!response.ok) throw new Error('Photo download failed');
+     return response.text();
+    }));
+    packet = JSON.parse(chunks.join(''));
+   } catch {
+    status.textContent = '照片下载失败或超时，请再次点击解锁。';
+    return;
+   } finally {
+    clearTimeout(timeout);
+    controller.abort();
+   }
+   status.textContent = '正在验证密码…';
    const key = await photoKey(password,bytes(packet.salt));
    const photos = await Promise.all(packet.photos.map(async photo => {
     const encrypted = bytes(photo.data);
@@ -488,7 +501,11 @@ function protectPhoto() {
  });
 }
 protectPhoto();
-document.querySelector('#photoUnlock').showModal();
+const unlockDialog = document.querySelector('#photoUnlock');
+if (typeof unlockDialog.showModal === 'function') {
+ unlockDialog.close();
+ unlockDialog.showModal();
+}
 </script>
 <style>
 #musicToggle {
@@ -508,7 +525,7 @@ body:not(.postcard-mode) #musicToggle {
  #musicToggle[aria-pressed="true"] span { animation: none; }
 }
 </style>
-<audio id="holidayMusic" src="./holiday-music.mp3" preload="metadata" loop playsinline></audio>
+<audio id="holidayMusic" src="./holiday-music.mp3" preload="none" loop playsinline></audio>
 <button id="musicToggle" type="button" aria-label="播放音乐" aria-pressed="false"><span aria-hidden="true">♫</span></button>
 <script>
 (() => {
@@ -574,7 +591,6 @@ body:not(.postcard-mode) #musicToggle {
  document.querySelector('#unlockForm').addEventListener('submit', () => {
   if (!hasPlayed && !manuallyPaused) playMusic();
  }, true);
- playMusic();
 })();
 </script>
 
