@@ -1,0 +1,648 @@
+<!--
+  - @Project: Grand Luxury Tree - Christmas Edition (Touch & Gesture & Stats)
+  - @Author: wp/electronicminer
+  - @Date: 2025-12-08
+  - @Description: 3D Christmas tree with AI Gestures + Touch + Traffic Analytics.
+  - @Style: Luxury Dashboard UI (Hidden by default, toggle with 'S')
+-->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>穆蓝的圣诞贺卡</title><meta name="color-scheme" content="light"><style>html,body.postcard-mode{background:#4c1425;color:#fff1d1}</style>
+    
+    <!-- 引入 FontAwesome 图标库 (让图标更美观) -->
+    
+
+    <!-- 引入不蒜子脚本 -->
+    
+
+    <style>
+        /* 修改背景为深色渐变 */
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            background: radial-gradient(circle at center, #0f2027 0%, #203a43 50%, #2c5364 100%); 
+            background-color: #490c20; 
+            font-family: 'Times New Roman', serif; 
+            touch-action: none; 
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; cursor: grab; }
+        #canvas-container:active { cursor: grabbing; }
+
+        /* UI Overlay */
+        #ui-layer {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 10; pointer-events: none;
+            display: flex; flex-direction: column; 
+            align-items: center;
+            padding-top: 40px;
+            box-sizing: border-box;
+            transition: opacity 0.5s ease;
+        }
+        
+        .ui-hidden { opacity: 0 !important; pointer-events: none !important; }
+
+        /* Loading */
+        #loader {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: #490c20; z-index: 100;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            transition: opacity 0.8s ease-out;
+        }
+        .loader-text {
+            color: #d4af37; font-size: 14px; letter-spacing: 4px; margin-top: 20px;
+            text-transform: uppercase; font-weight: 100;
+        }
+        .spinner {
+            width: 40px; height: 40px; border: 1px solid rgba(212, 175, 55, 0.2); 
+            border-top: 1px solid #d4af37; border-radius: 50%; 
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* Typography */
+        h1 { 
+            color: #fceea7; font-size: 8vw; 
+            max-size: 56px; margin: 0; font-weight: 400; 
+            letter-spacing: 6px; 
+            text-shadow: 0 0 50px rgba(252, 238, 167, 0.6); 
+            background: linear-gradient(to bottom, #fff, #eebb66);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            font-family: 'Cinzel', 'Times New Roman', serif;
+            opacity: 0.9; transition: opacity 0.5s ease;
+            text-align: center; pointer-events: none;
+        }
+        @media (min-width: 768px) { h1 { font-size: 56px; } }
+
+        /* Controls */
+        .controls-wrapper {
+            position: absolute; top: 100px; right: 20px;        
+            pointer-events: auto;
+            display: flex; flex-direction: column; align-items: flex-end;
+            gap: 10px; z-index: 20;
+            transition: opacity 0.5s ease;
+        }
+/* <!--
+  - @Project: Grand Luxury Tree - Christmas Edition (Touch & Gesture & Stats)
+  - @Author: wp/electronicminer
+  - @Date: 2025-12-08
+  - @Description: 3D Christmas tree with AI Gestures + Touch + Traffic Analytics.
+  - @Style: Luxury Dashboard UI (Hidden by default, toggle with 'S')
+--> */
+        .btn-group {
+            display: flex; flex-direction: column; gap: 10px; align-items: flex-end;
+        }
+
+        .control-btn {
+            background: rgba(20, 20, 20, 0.6); 
+            border: 1px solid rgba(212, 175, 55, 0.4); 
+            color: #d4af37; padding: 10px 20px; 
+            cursor: pointer; text-transform: uppercase; 
+            letter-spacing: 2px; font-size: 10px;
+            transition: all 0.4s;
+            display: flex; align-items: center; justify-content: center;
+            backdrop-filter: blur(5px); min-width: 120px;
+        }
+        
+        .control-btn.active {
+            background: rgba(212, 175, 55, 0.8); color: #000;
+            box-shadow: 0 0 15px rgba(212, 175, 55, 0.6);
+        }
+        .control-btn:hover { 
+            background: #d4af37; color: #000; 
+            box-shadow: 0 0 20px rgba(212, 175, 55, 0.5);
+        }
+        
+        .hint-text {
+            color: rgba(212, 175, 55, 0.5); font-size: 9px;
+            letter-spacing: 1px; text-transform: uppercase;
+            text-align: right; margin-top: 5px; max-width: 200px;
+        }
+
+        input[type="file"] { display: none; }
+
+        /* Mode Buttons (Bottom) */
+        #mode-bar {
+            position: absolute; bottom: 30px; left: 50%;
+            transform: translateX(-50%);
+            display: flex; gap: 15px;
+            z-index: 20; pointer-events: auto;
+        }
+        .mode-btn {
+            width: 50px; height: 50px; border-radius: 50%;
+            background: rgba(0,0,0,0.6);
+            border: 1px solid #d4af37;
+            color: #d4af37; font-size: 20px;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; transition: all 0.3s;
+            backdrop-filter: blur(4px);
+        }
+        .mode-btn:active { transform: scale(0.9); background: #d4af37; color: #000; }
+        
+        /* Webcam feedback */
+        #webcam-wrapper {
+            position: absolute; bottom: 100px; left: 20px;         
+            width: 120px; height: 90px;
+            border: 1px solid rgba(212, 175, 55, 0.5); 
+            box-shadow: 0 0 20px rgba(0,0,0,0.9);
+            border-radius: 4px; overflow: hidden; 
+            opacity: 0; pointer-events: none;
+            z-index: 50; background: #000;
+            transition: opacity 0.5s ease; 
+        }
+        #webcam { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+
+        #debug-info {
+            position: absolute; bottom: 5px; left: 5px;
+            color: rgba(212, 175, 55, 0.6); font-size: 10px;
+            font-family: monospace; pointer-events: none; z-index: 51;
+            width: 100%; text-align: center;
+        }
+        
+        #msg-box {
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            border: 1px solid #d4af37;
+            padding: 20px; color: #d4af37;
+            z-index: 200; text-align: center;
+            display: none; border-radius: 8px; min-width: 200px;
+        }
+/* <!--
+  - @Project: Grand Luxury Tree - Christmas Edition (Touch & Gesture & Stats)
+  - @Author: wp/electronicminer
+  - @Date: 2025-12-08
+  - @Description: 3D Christmas tree with AI Gestures + Touch + Traffic Analytics.
+  - @Style: Luxury Dashboard UI (Hidden by default, toggle with 'S')
+--> */
+        /* -------------------------------------------
+           【全新升级】Luxury Stats Dashboard 样式
+           ------------------------------------------- */
+        #footer-stats {
+            position: absolute;
+            bottom: 25px;
+            right: 25px;
+            z-index: 40;
+            pointer-events: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            /* 整体磨砂玻璃面板效果 */
+            background: rgba(8, 15, 25, 0.75);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            padding: 15px;
+            border-radius: 12px;
+            border: 1px solid rgba(212, 175, 55, 0.25);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+            width: 200px; /* 固定宽度，确保整齐 */
+            transition: all 0.3s ease;
+            
+            /* 【修改】确保动画过渡自然 */
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* 专门优化地图容器 */
+        .map-container {
+            width: 100%;
+            height: 100px; /* 控制高度 */
+            overflow: hidden;
+            border-radius: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            position: relative;
+            background: #000; /* 地图加载前的背景 */
+        }
+
+        .map-container script, 
+        .map-container iframe,
+        .map-container img {
+            filter: opacity(0.9) contrast(1.1); 
+            transition: filter 0.3s;
+        }
+        .map-container:hover script,
+        .map-container:hover iframe {
+            filter: opacity(1) contrast(1);
+        }
+
+        .stats-title {
+            font-family: 'Cinzel', serif;
+            color: rgba(212, 175, 55, 0.9);
+            font-size: 10px;
+            letter-spacing: 2px;
+            text-align: center;
+            margin-bottom: 5px;
+            border-bottom: 1px solid rgba(212, 175, 55, 0.15);
+            padding-bottom: 5px;
+        }
+
+        .stats-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+            color: #ccc;
+        }
+
+        .stats-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .stats-value {
+            font-family: 'Cinzel', serif; /* 使用高级衬线体 */
+            color: #fff;
+            font-weight: bold;
+            font-size: 14px;
+            text-shadow: 0 0 5px rgba(255, 255, 255, 0.3);
+        }
+    </style>
+    
+    <style>
+        
+    </style>
+
+    
+<style>
+#sitongGreeting{position:relative;margin:0;display:block;max-width:calc(100vw - 24px);font-family:Georgia,"Songti SC",serif;font-size:clamp(22px,min(6vw,5.4dvh),44px);line-height:1.18;letter-spacing:.035em;color:#fff0c9;-webkit-text-fill-color:#fff0c9;background:none;text-shadow:0 2px 15px #310817;white-space:nowrap}
+#ui-layer{z-index:30}
+#ui-layer::before{content:"";position:absolute;inset:0 0 auto;height:145px;background:linear-gradient(#310817 0%,#310817 48%,transparent);z-index:-1;pointer-events:none}
+#ui-layer .controls-wrapper{margin-top:8px}
+body:not(.postcard-mode) #morven3d{bottom:max(20px,calc(env(safe-area-inset-bottom) + 14px));max-width:calc(100vw - 110px);padding:4px 9px;background:#310817;color:#ffe5a8;border-radius:5px;line-height:1.3}
+body:not(.postcard-mode) #debug-info{left:50%;width:max-content;max-width:55%;transform:translateX(-50%);text-align:center}
+@media(max-width:450px){body:not(.postcard-mode) #debug-info{bottom:3px;font-size:8px}}
+#photoUnlock { display:block;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);margin:0;z-index:10000;width:290px;max-width:85%;box-sizing:border-box; } #photoUnlock[hidden] {display:none}
+#photoPassword { max-width:100%;box-sizing:border-box; }
+</style></head>
+<body class="postcard-mode"><div id="photoUnlock" role="dialog" aria-labelledby="unlockPrompt" style="max-width:85vw;background:#101b24;color:#fff1d1;border:1px solid #d3ad62;border-radius:12px;padding:22px"><form id="unlockForm"><label id="unlockPrompt" for="photoPassword">输入密码，打开圣诞照片</label><p><input id="photoPassword" type="password" required autocomplete="off" style="font-size:16px"></p><button type="submit" disabled>解锁照片</button><p id="unlockStatus" role="status"></p></form><noscript><p>请用 Safari 打开此贺卡，并启用 JavaScript。</p></noscript></div><style>#photoUnlock::backdrop{background:#0009}</style>
+
+    <div id="loader">
+        <div class="spinner"></div>
+        <div class="loader-text">Loading Memories</div>
+    </div>
+    
+    <div id="msg-box"></div>
+
+    <div id="canvas-container"></div>
+
+    <div id="ui-layer">
+        <h1 id="sitongGreeting">Dear Mu Lan<br>Merry Christmas</h1>
+        
+        <div class="controls-wrapper">
+            <div class="btn-group">
+                <div class="control-btn" id="cam-btn">📷 Enable Gesture</div>
+            </div>
+            <!-- 【修改】添加了 Press 'S' for Stats 的提示 -->
+            <div class="hint-text">Touch: Drag | Click Photo | Press 'S' for Stats</div>
+        </div>
+
+        <!-- 触屏模式切换按钮 -->
+
+        <!-- 【美化版统计仪表盘】 -->
+        <!-- 【修改】添加了 class="ui-hidden" 默认隐藏 -->
+        <div id="footer-stats" class="ui-hidden">
+            <div class="stats-title">WORLDWIDE VISITORS</div>
+            
+            <div class="map-container">
+                
+            </div>
+<!--
+  - @Project: Grand Luxury Tree - Christmas Edition (Touch & Gesture & Stats)
+  - @Author: wp/electronicminer
+  - @Date: 2025-12-08
+  - @Description: 3D Christmas tree with AI Gestures + Touch + Traffic Analytics.
+  - @Style: Luxury Dashboard UI (Hidden by default, toggle with 'S')
+--> 
+            <div class="stats-row">
+                <div class="stats-item" title="Total Page Views">
+                    <i class="fas fa-eye" style="color: #64ffda;"></i>
+                    <span id="busuanzi_container_site_pv" style="display:none">
+                        <span id="busuanzi_value_site_pv" class="stats-value">...</span>
+                    </span>
+                </div>
+                
+                <div class="stats-item" title="Total Visitors">
+                    <i class="fas fa-user" style="color: #d4af37;"></i>
+                    <span id="busuanzi_container_site_uv" style="display:none">
+                        <span id="busuanzi_value_site_uv" class="stats-value">...</span>
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="webcam-wrapper">
+        <video id="webcam" autoplay playsinline webkit-playsinline></video>
+    </div>
+    <div id="debug-info">Drag to rotate • Tap photo to view</div>
+
+    
+
+<style>
+body.postcard-mode #loader,body.postcard-mode #ui-layer,body.postcard-mode #canvas-container,body.postcard-mode #stats-panel{display:none}
+#postcard{position:fixed;top:0;right:0;bottom:0;left:0;z-index:80;background:radial-gradient(ellipse at 50% 58%,#782a33,#3c0c1b 72%,#240913);color:#fff4de;text-align:center;display:grid;grid-template-rows:auto minmax(0,1fr) auto;justify-items:center;overflow:hidden;padding:18px 12px 14px;padding:clamp(16px,4svh,36px) 12px max(14px,env(safe-area-inset-bottom));box-sizing:border-box}
+#postcard[hidden],#unlockedGallery[hidden]{display:none!important}
+#postcard h2{font:italic clamp(25px,5.2vw,43px) Georgia,serif;margin:0;text-shadow:0 2px 12px #421118}
+#postcard canvas{width:min(100%,570px);height:100%;min-height:0}
+#postcard p{margin:0 0 12px;font:italic clamp(18px,4vw,27px) Georgia,serif;color:#ffe0a2}
+#postcard button,#openAlbum button,#closeGallery{font:14px system-ui;color:#fff4de;background:#4d1c25;border:1px solid #d3aa71;border-radius:999px;padding:8px 13px;margin:0 3px;min-height:36px}
+#gestureStatus{display:block;font:13px system-ui;color:#ffe0a2;margin-top:6px}
+#photoUnlock{z-index:10000;margin:auto auto max(24px,env(safe-area-inset-bottom))} #photoUnlock::backdrop{background:#14040b50}
+#closeGallery{position:sticky;top:0;display:block;margin:0 0 10px auto}
+#morven3d{position:fixed;bottom:max(16px,env(safe-area-inset-bottom));left:20px;color:#ffdf9c;font:italic 20px Georgia,serif;z-index:75;pointer-events:none}
+</style>
+<section id="postcard">
+ <h2>Merry Christmas</h2>
+ <canvas id="evergreen" role="img" aria-label="挂着暖金灯、覆着白雪的层叠圣诞树"></canvas>
+ <div><small id="gestureStatus" role="status"></small></div>
+</section>
+<div id="morven3d" hidden>From 阿瑞</div>
+<script>(() => {
+  const canvas = document.querySelector("#evergreen");
+  const cx = canvas.getContext("2d");
+  function draw() {
+    if (!cx || canvas.clientHeight < 1) return;
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    const d = Math.min(devicePixelRatio || 1, 1.5);
+    canvas.width = Math.round(w * d);
+    canvas.height = Math.round(h * d);
+    cx.setTransform(d, 0, 0, d, 0, 0);
+    let seed = 12071;
+    const rand = () => {
+      seed = 1664525 * seed + 1013904223 >>> 0;
+      return seed / 4294967296;
+    };
+    const x = w / 2, unit = Math.min(w / 400, h / 470), base = h * 0.91;
+    cx.save();
+    cx.translate(x, base);
+    cx.scale(unit, unit);
+    const ellipse = (a, b, r, s, fill) => {
+      cx.fillStyle = fill;
+      cx.beginPath();
+      cx.ellipse(a, b, r, s, 0, 0, Math.PI * 2);
+      cx.fill();
+    };
+    for (let i = 0; i < 290; i++) ellipse((rand() - 0.5) * 600, -rand() * 480, rand() * 1.65 + 0.25, rand() * 1.45 + 0.25, "rgba(255,242,224," + (0.11 + rand() * 0.53) + ")");
+    const ground = cx.createRadialGradient(0, 7, 5, 0, 7, 125);
+    ground.addColorStop(0, "#fff7e5");
+    ground.addColorStop(1, "#fff7e500");
+    ellipse(0, 7, 128, 20, ground);
+    cx.fillStyle = "#3a241b";
+    cx.fillRect(-7, -57, 14, 58);
+    const layers = 8;
+    for (let layer = 0; layer < layers; layer++) {
+      const y = -37 - layer * 41, radius = 132 - layer * 14;
+      for (let branch = 0; branch < 41; branch++) {
+        const side = branch % 2 ? 1 : -1;
+        const reach = (0.26 + rand() * 0.74) * radius;
+        const tipX = side * reach, tipY = y - 12 + rand() * 22;
+        const stemY = y - 48 - rand() * 15;
+        cx.strokeStyle = ["#152d25", "#264330", "#426044"][branch % 3];
+        cx.lineWidth = 3 + rand() * 2;
+        cx.beginPath();
+        cx.moveTo(0, stemY);
+        cx.quadraticCurveTo(tipX * 0.58, tipY + 6, tipX, tipY);
+        cx.stroke();
+        for (let n = 1; n <= 18; n++) {
+          const t = n / 19, a = tipX * t, b = stemY + (tipY - stemY) * (1 - (1 - t) ** 2);
+          const spread = (3 + rand() * 9) * (1 - t * 0.54);
+          cx.strokeStyle = ["#153529", "#254b34", "#42714a", "#829671"][n % 4];
+          cx.lineWidth = 0.8 + rand();
+          cx.beginPath();
+          cx.moveTo(a, b);
+          cx.lineTo(a + side * spread, b - 3 - rand() * 9);
+          cx.moveTo(a, b);
+          cx.lineTo(a + side * spread * 0.72, b + rand() * 9);
+          cx.stroke();
+        }
+        if (branch % 3 === 0) {
+          cx.strokeStyle = branch % 2 ? "rgba(255,252,235,.76)" : "rgba(200,220,204,.60)";
+          cx.lineWidth = 1.6 + rand() * 2;
+          cx.beginPath();
+          cx.moveTo(tipX * 0.32, stemY * 0.49 + tipY * 0.51 - 3);
+          cx.quadraticCurveTo(tipX * 0.73, tipY + 4, tipX, tipY - 2);
+          cx.stroke();
+        }
+      }
+      for (let bulb = 0; bulb < 12; bulb++) {
+        const a = (rand() - 0.5) * radius * 1.65, b = y - 18 + rand() * 23;
+        const glow = cx.createRadialGradient(a, b, 0, a, b, 9);
+        glow.addColorStop(0, "#fff4c4");
+        glow.addColorStop(0.24, "#ffd978b0");
+        glow.addColorStop(1, "#ffca4500");
+        ellipse(a, b, 9, 9, glow);
+        ellipse(a, b, 1.3, 1.6, "#fff8ce");
+        if (bulb % 5 === 0) ellipse(a + 4, b - 4, 3.4, 3.6, bulb % 2 ? "#cb3443" : "#ffcd69");
+      }
+    }
+    cx.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const a = -Math.PI / 2 + i * Math.PI / 5, r = i % 2 ? 7 : 16;
+      const px = Math.cos(a) * r, py = -380 + Math.sin(a) * r;
+      i ? cx.lineTo(px, py) : cx.moveTo(px, py);
+    }
+    cx.closePath();
+    cx.shadowBlur = 16;
+    cx.shadowColor = "#face6a";
+    cx.fillStyle = "#ffe098";
+    cx.fill();
+    cx.restore();
+  }
+  const startDrawing = () => {
+    draw();
+    if (window.ResizeObserver) new ResizeObserver(draw).observe(canvas);
+    else window.addEventListener("resize", draw);
+  };
+  requestAnimationFrame(() => requestAnimationFrame(startDrawing));
+  window.addEventListener("tree-photo-unlocked", () => {
+    const script = document.createElement("script");
+    const status = document.querySelector("#unlockStatus");
+    const dialog = document.querySelector("#photoUnlock");
+    script.type = "module";
+    script.src = "./mulan-tree.js";
+    const showFallback = () => {
+      dialog.hidden = true;
+      dialog.dispatchEvent(new Event("close"));
+      document.querySelector("#gestureStatus").textContent = "3D \u6682\u672A\u52A0\u8F7D\uFF0C\u53EF\u5148\u67E5\u770B\u7167\u7247\u3002";
+      document.querySelector("#unlockedGallery").hidden = false;
+    };
+    const fallback = setTimeout(showFallback, 12e3);
+    script.addEventListener("error", () => {
+      clearTimeout(fallback);
+      showFallback();
+    }, { once: true });
+    window.addEventListener("tree-3d-failed", () => {
+      clearTimeout(fallback);
+      showFallback();
+    }, { once: true });
+    window.addEventListener("tree-3d-ready", () => {
+      clearTimeout(fallback);
+      dialog.hidden = true;
+      dialog.dispatchEvent(new Event("close"));
+      document.body.classList.remove("postcard-mode");
+      document.querySelector("#postcard").hidden = true;
+      document.querySelector("#morven3d").hidden = false;
+    }, { once: true });
+    status.textContent = "\u5BC6\u7801\u6B63\u786E\uFF0C\u6B63\u5728\u6302\u4E0A\u7167\u7247\u2026";
+    document.body.append(script);
+  }, { once: true });
+})();
+</script><section id="unlockedGallery" aria-label="已解锁的照片" hidden><button id="closeGallery" onclick="this.parentElement.hidden=true">返回圣诞树</button></section>
+<style>#unlockedGallery{position:fixed;inset:6% 5%;z-index:9999;overflow:auto;text-align:center;background:#101b24;padding:12px;border:1px solid #d3ad62;border-radius:12px}#unlockedGallery img{display:block;max-width:100%;max-height:74vh;margin:0 auto 14px}</style>
+<script>async function photoKey(password, salt) {
+  const material = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveKey"]);
+  return crypto.subtle.deriveKey({ name: "PBKDF2", hash: "SHA-256", salt, iterations: 6e5 }, material, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+}
+function protectPhoto() {
+  const photoParts = ["morven-mulan-41c8e7-photo-0.bin", "morven-mulan-41c8e7-photo-1.bin"];
+  const dialog = document.querySelector("#photoUnlock");
+  const form = document.querySelector("#unlockForm");
+  const field = document.querySelector("#photoPassword");
+  const status = document.querySelector("#unlockStatus");
+  const button = form.querySelector("button");
+  const gallery = document.querySelector("#unlockedGallery");
+  const bytes = (value) => Uint8Array.from(atob(value), (char) => char.charCodeAt(0));
+  dialog.addEventListener("cancel", (event) => event.preventDefault());
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    button.disabled = true;
+    status.textContent = "\u6B63\u5728\u89E3\u9501\u2026";
+    try {
+      if (!window.crypto || !window.crypto.subtle || !window.TextEncoder) {
+        status.textContent = "\u5F53\u524D\u6D4F\u89C8\u5668\u65E0\u6CD5\u89E3\u5BC6\u7167\u7247\uFF0C\u8BF7\u5728 Safari \u4E2D\u6253\u5F00\u3002";
+        return;
+      }
+      const password = field.value;
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 18e3);
+      let packet;
+      try {
+        status.textContent = "\u6B63\u5728\u4E0B\u8F7D\u52A0\u5BC6\u7167\u7247\u2026";
+        const chunks = await Promise.all(photoParts.map(async (path) => {
+          const response = await fetch(path, { signal: controller.signal });
+          if (!response.ok) throw new Error("Photo download failed");
+          return response.text();
+        }));
+        packet = JSON.parse(chunks.join(""));
+      } catch {
+        status.textContent = "\u7167\u7247\u4E0B\u8F7D\u5931\u8D25\u6216\u8D85\u65F6\uFF0C\u8BF7\u518D\u70B9\u4E00\u6B21\u300C\u89E3\u9501\u7167\u7247\u300D\u3002";
+        return;
+      } finally {
+        clearTimeout(timer);
+        controller.abort();
+      }
+      status.textContent = "\u6B63\u5728\u9A8C\u8BC1\u5BC6\u7801\u2026";
+      const key = await photoKey(password, bytes(packet.salt));
+      const photos = await Promise.all(packet.photos.map(async (photo) => {
+        const encrypted = bytes(photo.data);
+        const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: bytes(photo.iv) }, key, encrypted);
+        return new Blob([plain], { type: photo.type });
+      }));
+      window.treePhotoUrls = photos.map((photo) => URL.createObjectURL(photo));
+      window.treePhotoUrls.forEach((url, index) => {
+        const image = new Image();
+        image.src = url;
+        image.alt = "\u5723\u8BDE\u7167\u7247 " + (index + 1);
+        gallery.append(image);
+      });
+      form.reset();
+      window.dispatchEvent(new Event("tree-photo-unlocked"));
+    } catch {
+      status.textContent = "\u89E3\u9501\u5931\u8D25\uFF0C\u8BF7\u68C0\u67E5\u5BC6\u7801\uFF0C\u6216\u6362\u4E00\u4E2A\u652F\u6301 HTTPS \u7684\u6D4F\u89C8\u5668\u3002";
+    } finally {
+      if (!window.treePhotoUrls) button.disabled = false;
+    }
+  });
+}
+protectPhoto();
+document.querySelector("#unlockForm button").disabled = false;
+</script>
+<style>
+#musicToggle {
+ position: fixed; z-index: 81; top: max(12px, env(safe-area-inset-top));
+ right: max(12px, env(safe-area-inset-right)); width: 44px; height: 44px;
+ display: grid; place-items: center; padding: 0; border-radius: 50%;
+ border: 1px solid #c6b75e; background: #182918; color: #fff0bf;
+ font: 23px/1 system-ui; cursor: pointer;
+}
+body:not(.postcard-mode) #musicToggle {
+ top: auto;
+ bottom: max(22px, calc(env(safe-area-inset-bottom) + 12px));
+}
+#musicToggle[aria-pressed="true"] span { animation: music-spin 3s linear infinite; }
+@keyframes music-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+ #musicToggle[aria-pressed="true"] span { animation: none; }
+}
+</style>
+<audio id="holidayMusic" src="./holiday-music.mp3" preload="none" loop playsinline></audio>
+<button id="musicToggle" type="button" aria-label="播放音乐" aria-pressed="false"><span aria-hidden="true">♫</span></button>
+<script>(() => {
+  const song = document.querySelector("#holidayMusic");
+  const toggle = document.querySelector("#musicToggle");
+  const unlockDialog = document.querySelector("#photoUnlock");
+  unlockDialog.append(toggle);
+  unlockDialog.addEventListener("close", () => document.body.append(toggle));
+  const startTime = 38;
+  const volume = 0.32;
+  const fadeSeconds = 3;
+  let context, gain, hasPlayed = false, manuallyPaused = false;
+  song.currentTime = startTime;
+  song.volume = volume;
+  function prepareAudio() {
+    if (context) return;
+    const AudioEngine = window.AudioContext || window.webkitAudioContext;
+    if (!AudioEngine) return;
+    context = new AudioEngine();
+    gain = context.createGain();
+    gain.gain.value = 0;
+    context.createMediaElementSource(song).connect(gain).connect(context.destination);
+    song.volume = 1;
+  }
+  function playMusic() {
+    try {
+      prepareAudio();
+      if ((context == null ? void 0 : context.state) === "suspended") void context.resume().catch(() => {
+      });
+    } catch (error) {
+      console.warn("Music fade unavailable", error);
+    }
+    void song.play().catch(() => {
+    });
+  }
+  function setPlaying(playing) {
+    toggle.setAttribute("aria-pressed", String(playing));
+    toggle.setAttribute("aria-label", playing ? "\u6682\u505C\u97F3\u4E50" : "\u64AD\u653E\u97F3\u4E50");
+  }
+  song.addEventListener("playing", () => {
+    if (song.seeking) return;
+    if (gain && !hasPlayed) {
+      const now = context.currentTime;
+      gain.gain.setValueAtTime(0, now);
+      gain.gain.linearRampToValueAtTime(volume, now + fadeSeconds);
+    }
+    hasPlayed = true;
+    setPlaying(true);
+  });
+  song.addEventListener("pause", () => setPlaying(false));
+  song.addEventListener("waiting", () => setPlaying(false));
+  song.addEventListener("error", () => setPlaying(false));
+  toggle.addEventListener("click", () => {
+    manuallyPaused = !song.paused;
+    if (manuallyPaused) song.pause();
+    else playMusic();
+  });
+  document.querySelector("#unlockForm").addEventListener("submit", () => {
+    if (!hasPlayed && !manuallyPaused) playMusic();
+  }, true);
+  playMusic();
+})();
+</script>
+
+</body>
+</html>
