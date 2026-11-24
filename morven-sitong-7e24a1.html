@@ -418,7 +418,7 @@ body.postcard-mode #loader,body.postcard-mode #ui-layer,body.postcard-mode #canv
   const status=document.querySelector('#unlockStatus');
   const dialog=document.querySelector('#photoUnlock');
   script.type='module';
-  script.src='./sitong-tree.js';
+  script.src='./sitong-tree-snow.js';
   const showFallback=()=>{
    dialog.close();
    document.querySelector('#gestureStatus').textContent='3D 暂未加载，可先查看照片。';
@@ -459,6 +459,7 @@ function protectPhoto() {
   status.textContent = '正在解锁…';
   try {
    const password = field.value;
+   const keyTask = photoKey(password,bytes("/ZgNfKI3ZHpO5k50l045aw==")).then(key=>({key}),error=>({error}));
    status.textContent = '正在下载加密照片…';
    const controller = new AbortController();
    const timeout = setTimeout(() => controller.abort(), 25000);
@@ -478,7 +479,9 @@ function protectPhoto() {
     controller.abort();
    }
    status.textContent = '正在验证密码…';
-   const key = await photoKey(password,bytes(packet.salt));
+   const result = await keyTask;
+   if (result.error) throw result.error;
+   const key = result.key;
    const photos = await Promise.all(packet.photos.map(async photo => {
     const encrypted = bytes(photo.data);
     const plain = await crypto.subtle.decrypt({name:'AES-GCM',iv:bytes(photo.iv)},key,encrypted);
