@@ -10,7 +10,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Grand Luxury Tree - Christmas Edition</title>
+    <title>乐乐的圣诞贺卡</title>
     
     <!-- 引入 FontAwesome 图标库 (让图标更美观) -->
     
@@ -268,8 +268,9 @@
     </style>
 
     
-</head>
-<body class="postcard-mode"><dialog id="photoUnlock" style="max-width:85vw;background:#101b24;color:#fff1d1;border:1px solid #d3ad62;border-radius:12px;padding:22px"><form id="unlockForm"><label for="photoPassword">输入密码，打开圣诞照片</label><p><input id="photoPassword" type="password" required autocomplete="off" style="font-size:16px"></p><button type="submit">解锁照片</button><p id="unlockStatus" role="status"></p></form></dialog><style>#photoUnlock::backdrop{background:#0009}</style>
+<style>#photoUnlock{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);margin:0;z-index:10000;width:290px;max-width:85%;box-sizing:border-box} #photoUnlock[hidden]{display:none}
+</style></head>
+<body class="postcard-mode"><div id="photoUnlock" role="dialog" style="max-width:85vw;background:#101b24;color:#fff1d1;border:1px solid #d3ad62;border-radius:12px;padding:22px"><form id="unlockForm"><label for="photoPassword">输入密码，打开圣诞照片</label><p><input id="photoPassword" type="password" required autocomplete="off" style="font-size:16px"></p><button type="submit" disabled>解锁照片</button><p id="unlockStatus" role="status"></p></form></div><style>#photoUnlock::backdrop{background:#0009}</style>
 
     <div id="loader">
         <div class="spinner"></div>
@@ -342,7 +343,7 @@ body.postcard-mode #loader,body.postcard-mode #ui-layer,body.postcard-mode #canv
 #postcard p{margin:0 0 12px;font:italic clamp(18px,4vw,27px) Georgia,serif;color:#ffe0a2}
 #postcard button,#openAlbum button,#closeGallery{font:14px system-ui;color:#fff4de;background:#4d1c25;border:1px solid #d3aa71;border-radius:999px;padding:8px 13px;margin:0 3px;min-height:36px}
 #gestureStatus{display:block;font:13px system-ui;color:#ffe0a2;margin-top:6px}
-#photoUnlock{z-index:10000;margin:auto auto max(24px,env(safe-area-inset-bottom))} #photoUnlock::backdrop{background:#14040b50}
+
 #closeGallery{position:sticky;top:0;display:block;margin:0 0 10px auto}
 #morven3d{position:fixed;bottom:max(16px,env(safe-area-inset-bottom));left:20px;color:#ffdf9c;font:italic 20px Georgia,serif;z-index:75;pointer-events:none}
 </style>
@@ -410,9 +411,9 @@ body.postcard-mode #loader,body.postcard-mode #ui-layer,body.postcard-mode #canv
   const status=document.querySelector('#unlockStatus');
   const dialog=document.querySelector('#photoUnlock');
   script.type='module';
-  script.src='./private-tree-gesture.js';
+  script.src='./lele-tree-ornaments.js';
   const showFallback=()=>{
-   dialog.close();
+   dialog.hidden = true; dialog.dispatchEvent(new Event('close'));
    document.querySelector('#gestureStatus').textContent='3D 暂未加载，可先查看照片。';
    document.querySelector('#unlockedGallery').hidden=false;
   };
@@ -421,7 +422,7 @@ body.postcard-mode #loader,body.postcard-mode #ui-layer,body.postcard-mode #canv
   window.addEventListener('tree-3d-failed',()=>{clearTimeout(fallback);showFallback()},{once:true});
   window.addEventListener('tree-3d-ready',()=>{
    clearTimeout(fallback);
-   dialog.close();
+   dialog.hidden = true; dialog.dispatchEvent(new Event('close'));
    document.body.classList.remove('postcard-mode');
    document.querySelector('#postcard').hidden=true;document.querySelector('#morven3d').hidden=false;
   },{once:true});
@@ -473,11 +474,11 @@ function protectPhoto() {
  });
 }
 protectPhoto();
-document.querySelector('#photoUnlock').showModal();
+document.querySelector('#unlockForm button').disabled = false;
 </script>
 <style>
 #musicToggle {
- position: fixed; z-index: 81; top: max(12px, env(safe-area-inset-top));
+ position: fixed; z-index: 10001; top: max(12px, env(safe-area-inset-top));
  right: max(12px, env(safe-area-inset-right)); width: 44px; height: 44px;
  display: grid; place-items: center; padding: 0; border-radius: 50%;
  border: 1px solid #c6b75e; background: #182918; color: #fff0bf;
@@ -500,8 +501,8 @@ body:not(.postcard-mode) #musicToggle {
  const song = document.querySelector('#holidayMusic');
  const toggle = document.querySelector('#musicToggle');
  const unlockDialog = document.querySelector('#photoUnlock');
- unlockDialog.append(toggle);
- unlockDialog.addEventListener('close', () => document.body.append(toggle));
+
+
  const startTime = 38;
  const volume = 0.32;
  const fadeSeconds = 3;
