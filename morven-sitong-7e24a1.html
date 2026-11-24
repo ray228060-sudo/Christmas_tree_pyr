@@ -418,7 +418,7 @@ body.postcard-mode #loader,body.postcard-mode #ui-layer,body.postcard-mode #canv
   const status=document.querySelector('#unlockStatus');
   const dialog=document.querySelector('#photoUnlock');
   script.type='module';
-  script.src='./sitong-tree-snow.js';
+  script.src='./sitong-tree-progressive.js';
   const showFallback=()=>{
    dialog.close();
    document.querySelector('#gestureStatus').textContent='3D 暂未加载，可先查看照片。';
@@ -444,7 +444,7 @@ body.postcard-mode #loader,body.postcard-mode #ui-layer,body.postcard-mode #canv
  return crypto.subtle.deriveKey({name:'PBKDF2',hash:'SHA-256',salt,iterations:600000},material,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);
 }
 function protectPhoto() {
- const photoParts = ["morven-sitong-7e24a1-photo-0.bin","morven-sitong-7e24a1-photo-1.bin","morven-sitong-7e24a1-photo-2.bin","morven-sitong-7e24a1-photo-3.bin","morven-sitong-7e24a1-photo-4.bin"];
+ const photoParts = [{"path":"morven-sitong-7e24a1-image-0.bin","iv":"lQns2H2T6t8mHaSG","type":"image/jpeg","size":631321},{"path":"morven-sitong-7e24a1-image-1.bin","iv":"Nwstn21pqKKwV2z1","type":"image/jpeg","size":988220},{"path":"morven-sitong-7e24a1-image-2.bin","iv":"BXibAC20TxBGEnVj","type":"image/jpeg","size":802538},{"path":"morven-sitong-7e24a1-image-3.bin","iv":"S3IW5jNGQ1eSAkfo","type":"image/jpeg","size":320049},{"path":"morven-sitong-7e24a1-image-4.bin","iv":"Db61kWt7YyMA1sLY","type":"image/jpeg","size":269943},{"path":"morven-sitong-7e24a1-image-5.bin","iv":"4o/HSFPZ8nKm4tsJ","type":"image/jpeg","size":361027},{"path":"morven-sitong-7e24a1-image-6.bin","iv":"pjdd0C8V2cgSCn4c","type":"image/jpeg","size":1109761},{"path":"morven-sitong-7e24a1-image-7.bin","iv":"E5kvrgdndblZ5DVD","type":"image/jpeg","size":1175829}];
  const dialog = document.querySelector('#photoUnlock');
  const form = document.querySelector('#unlockForm');
  const field = document.querySelector('#photoPassword');
@@ -452,54 +452,68 @@ function protectPhoto() {
  const button = form.querySelector('button');
  const gallery = document.querySelector('#unlockedGallery');
  const bytes = value => Uint8Array.from(atob(value), char => char.charCodeAt(0));
+ const firstPhoto = photoParts.reduce((smallest, part) => part.size < smallest.size ? part : smallest);
+ async function downloadPhoto(part) {
+  for (const timeout of [20000, 45000]) {
+   const controller = new AbortController();
+   const timer = setTimeout(() => controller.abort(), timeout);
+   try {
+    const response = await fetch(part.path, {signal:controller.signal});
+    if (!response.ok) throw new Error('Photo download failed');
+    const data = await response.arrayBuffer();
+    if (data.byteLength !== part.size) throw new Error('Incomplete photo download');
+    return data;
+   } catch (error) {
+    if (timeout === 45000) throw error;
+   } finally {
+    clearTimeout(timer);
+   }
+  }
+ }
+ async function addPhoto(part, key, encrypted) {
+  const plain = await crypto.subtle.decrypt({name:'AES-GCM',iv:bytes(part.iv)},key,encrypted);
+  const url = URL.createObjectURL(new Blob([plain],{type:part.type}));
+  const image = new Image();
+  image.alt = '圣诞照片';
+  image.src = url;
+  gallery.append(image);
+  (window.treePhotoUrls ||= []).push(url);
+  window.dispatchEvent(new CustomEvent('tree-photo-added',{detail:url}));
+ }
  dialog.addEventListener('cancel', event => event.preventDefault());
  form.addEventListener('submit', async event => {
   event.preventDefault();
   button.disabled = true;
-  status.textContent = '正在解锁…';
+  status.textContent = '正在下载第一张加密照片…';
   try {
-   const password = field.value;
-   const keyTask = photoKey(password,bytes("/ZgNfKI3ZHpO5k50l045aw==")).then(key=>({key}),error=>({error}));
-   status.textContent = '正在下载加密照片…';
-   const controller = new AbortController();
-   const timeout = setTimeout(() => controller.abort(), 25000);
-   let packet;
+   const keyTask = photoKey(field.value, bytes("/ZgNfKI3ZHpO5k50l045aw==")).then(key=>({key}),error=>({error}));
+   let encrypted;
    try {
-    const chunks = await Promise.all(photoParts.map(async path => {
-     const response = await fetch(path, {signal:controller.signal});
-     if (!response.ok) throw new Error('Photo download failed');
-     return response.text();
-    }));
-    packet = JSON.parse(chunks.join(''));
+    encrypted = await downloadPhoto(firstPhoto);
    } catch {
-    status.textContent = '照片下载失败或超时，请再次点击解锁。';
+    status.textContent = '首张照片下载失败，请重试。也可以复制链接到 Safari 或系统浏览器打开。';
     return;
-   } finally {
-    clearTimeout(timeout);
-    controller.abort();
    }
-   status.textContent = '正在验证密码…';
    const result = await keyTask;
    if (result.error) throw result.error;
-   const key = result.key;
-   const photos = await Promise.all(packet.photos.map(async photo => {
-    const encrypted = bytes(photo.data);
-    const plain = await crypto.subtle.decrypt({name:'AES-GCM',iv:bytes(photo.iv)},key,encrypted);
-    return new Blob([plain],{type:photo.type});
-   }));
-   window.treePhotoUrls = photos.map(photo => URL.createObjectURL(photo));
-   window.treePhotoUrls.forEach((url,index) => {
-    const image = new Image();
-    image.src = url;
-    image.alt = '圣诞照片 '+(index+1);
-    gallery.append(image);
-   });
+   await addPhoto(firstPhoto, result.key, encrypted);
    form.reset();
    window.dispatchEvent(new Event('tree-photo-unlocked'));
+   const remaining = photoParts.filter(part => part !== firstPhoto);
+   await Promise.all(Array.from({length:2}, async () => {
+    while (remaining.length) {
+     const part = remaining.shift();
+     try {
+      await addPhoto(part, result.key, await downloadPhoto(part));
+     } catch {
+      document.querySelector('#gestureStatus').textContent = '部分照片未下载成功，可重新打开贺卡再试。';
+     }
+    }
+   }));
   } catch {
-   status.textContent = '解锁失败，请检查密码，或换一个支持 HTTPS 的浏览器。';
+   status.textContent = '解锁失败，请检查密码，或用 Safari / 系统浏览器重试。';
   } finally {
-   if(!window.treePhotoUrls)button.disabled = false;
+   if (!window.treePhotoUrls) button.disabled = false;
   }
  });
 }
