@@ -499,7 +499,6 @@ body.postcard-mode #loader,body.postcard-mode #ui-layer,body.postcard-mode #canv
   return crypto.subtle.deriveKey({ name: "PBKDF2", hash: "SHA-256", salt, iterations: 6e5 }, material, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
 }
 function protectPhoto() {
-  const photoParts = ["morven-mulan-41c8e7-photo-0.bin", "morven-mulan-41c8e7-photo-1.bin"];
   const dialog = document.querySelector("#photoUnlock");
   const form = document.querySelector("#unlockForm");
   const field = document.querySelector("#photoPassword");
@@ -519,16 +518,13 @@ function protectPhoto() {
       }
       const password = field.value;
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 18e3);
+      const timer = setTimeout(() => controller.abort(), 45e3);
       let packet;
       try {
         status.textContent = "\u6B63\u5728\u4E0B\u8F7D\u52A0\u5BC6\u7167\u7247\u2026";
-        const chunks = await Promise.all(photoParts.map(async (path) => {
-          const response = await fetch(path, { signal: controller.signal });
-          if (!response.ok) throw new Error("Photo download failed");
-          return response.text();
-        }));
-        packet = JSON.parse(chunks.join(""));
+        const response = await fetch("./mulan-encrypted-album.json", { signal: controller.signal });
+        if (!response.ok) throw new Error("Photo download failed");
+        packet = await response.json();
       } catch {
         status.textContent = "\u7167\u7247\u4E0B\u8F7D\u5931\u8D25\u6216\u8D85\u65F6\uFF0C\u8BF7\u518D\u70B9\u4E00\u6B21\u300C\u89E3\u9501\u7167\u7247\u300D\u3002";
         return;
